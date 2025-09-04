@@ -1,18 +1,22 @@
-// ---------------- Imports ----------------
-const express = require("express");
-const cors = require("cors");
-const { Pool } = require("pg");
-const bcrypt = require("bcrypt");
-
+import express from "express";
+import cors from "cors";
+import pkg from "pg";
+const { Pool } = pkg;
+import bcrypt from "bcrypt";
+import pg from "pg"; // or your query wrapper
 const app = express();
 app.use(cors());
 app.use(express.json());
 
 // ---------------- PostgreSQL Connection ----------------
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL
+  host: "127.0.0.1",
+  port: 5432,
+  user: "postgres",
+  password: "",
+  database: "kitchatty",
 });
-
+// ---------------- Backend URL ----------------
 
 
 // ---------------- Helper ----------------
