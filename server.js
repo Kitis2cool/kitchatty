@@ -10,12 +10,9 @@ app.use(express.json());
 
 // ---------------- PostgreSQL Connection ----------------
 const pool = new Pool({
-  host: "127.0.0.1", // Replace with Railway host when deploying
-  port: 5432,
-  user: "postgres",
-  password: "",
-  database: "kitchatty",
+  connectionString: process.env.DATABASE_URL
 });
+
 
 
 // ---------------- Helper ----------------
