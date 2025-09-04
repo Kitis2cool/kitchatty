@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Edit Profile - Kitchatty</title>
+<style>
+body {
+  margin: 0;
+  font-family: "Segoe UI", Arial, sans-serif;
+  background: linear-gradient(135deg,#091f36,#0f2862);
+  color: #fff;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+}
+#profileContainer {
+  background: rgba(15,40,98,0.95);
+  padding: 30px;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+  width: 320px;
+}
+#profileContainer h2 {
+  text-align: center;
+  margin-bottom: 20px;
+}
+input[type="text"] {
+  width: 100%;
+  padding: 8px;
+  margin-bottom: 12px;
+  border-radius: 6px;
+  border: 1px solid #333;
+  background: #091f36;
+  color: #fff;
+}
+button {
+  width: 48%;
+  padding: 10px;
+  border: none;
+  border-radius: 6px;
+  font-weight: bold;
+  cursor: pointer;
+  margin-right: 4%;
+  margin-top: 8px;
+}
+#saveBtn { background: #9e363a; color: #fff; }
+#cancelBtn { background: #4f5f76; color: #fff; }
+</style>
+</head>
+<body>
+
+<div id="profileContainer">
+  <h2>Edit Profile</h2>
+  <label>Display Name:</label>
+  <input type="text" id="displayName" placeholder="Enter display name">
+  <label>Avatar URL:</label>
+  <input type="text" id="avatarURL" placeholder="Enter avatar URL">
+  <label>Status:</label>
+  <input type="text" id="status" placeholder="Enter status">
+  <div style="display:flex; justify-content:space-between;">
+    <button id="saveBtn">Save</button>
+    <button id="cancelBtn">Cancel</button>
+  </div>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
+import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyBXhiyGWev_pgR04Xqwq-09cE_oyrLWnU8",
+  authDomain: "kitisnotebook.firebaseapp.com",
+  projectId: "kitisnotebook",
+  storageBucket: "kitisnotebook.firebasestorage.app",
+  messagingSenderId: "450680847245",
+  appId: "1:450680847245:web:2e4ebb71ccd3a7920bdbc4",
+  measurementId: "G-W3ZVV6N6KK"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
+const loggedInUser = localStorage.getItem("loggedInUser");
+if(!loggedInUser) window.location.href = "login.html";
+
+const displayNameInput = document.getElementById("displayName");
+const avatarInput = document.getElementById("avatarURL");
+const statusInput = document.getElementById("status");
+
+// Load existing profile
+async function loadProfile() {
+  const profileDoc = await getDoc(doc(db, "profiles", loggedInUser));
+  if(profileDoc.exists()) {
+    const data = profileDoc.data();
+    displayNameInput.value = data.displayName || loggedInUser;
+    avatarInput.value = data.avatar || `https://i.pravatar.cc/30?u=${loggedInUser}`;
+    statusInput.value = data.status || "";
+  } else {
+    displayNameInput.value = loggedInUser;
+    avatarInput.value = `https://i.pravatar.cc/30?u=${loggedInUser}`;
+    statusInput.value = "";
+  }
+}
+loadProfile();
+
+// Save profile
+document.getElementById("saveBtn").onclick = async () => {
+  const displayName = displayNameInput.value.trim() || loggedInUser;
+  const avatar = avatarInput.value.trim() || `https://i.pravatar.cc/30?u=${loggedInUser}`;
+  const status = statusInput.value.trim();
+
+  await setDoc(doc(db,"profiles",loggedInUser), {
+    displayName,
+    avatar,
+    status
+  });
+  window.location.href = "index.html"; // redirect back to chat
+};
+
+// Cancel button
+document.getElementById("cancelBtn").onclick = () => {
+  window.location.href = "index.html";
+};
+</script>
+
+</body>
+</html>

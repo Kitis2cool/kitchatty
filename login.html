@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Login - Kitchatty</title>
+<style>
+/* Base styles */
+html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    width: 100%;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: radial-gradient(circle at top left, #0d0d0d, #1a1a1a 50%, #0a0a0a 100%);
+    overflow: hidden;
+    color: #fff;
+    position: relative;
+}
+
+/* Background glowing orbs */
+body::before,
+body::after {
+    content: '';
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(80px);
+    opacity: 0.25;
+    animation: float 20s ease-in-out infinite alternate;
+    z-index: 0;
+}
+body::before {
+    width: 400px;
+    height: 400px;
+    top: -120px;
+    left: -120px;
+    background: #ff8c00;
+    animation-duration: 26s;
+}
+body::after {
+    width: 320px;
+    height: 320px;
+    bottom: -120px;
+    right: -120px;
+    background: #ff4500;
+    animation-duration: 18s;
+}
+@keyframes float {
+    from { transform: translateY(0) translateX(0); }
+    to { transform: translateY(-50px) translateX(50px); }
+}
+
+/* Centering container */
+.container {
+    height: 100%;
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    position: relative;
+    z-index: 1;
+}
+
+/* Login card */
+.login-card {
+    background: rgba(15,15,15,0.92);
+    padding: 40px 30px;
+    border-radius: 20px;
+    width: 360px;
+    max-width: 90vw;
+    text-align: center;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.8), 0 0 25px rgba(255,140,0,0.25);
+    animation: fadeInUp 0.8s ease-out;
+    backdrop-filter: blur(6px);
+    box-sizing: border-box;
+}
+@keyframes fadeInUp {
+    from { opacity: 0; transform: translateY(40px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* Heading */
+h1 {
+    color: #ffa733;
+    margin-bottom: 25px;
+    font-size: 28px;
+    text-shadow: 0 0 15px rgba(255,140,0,0.4);
+}
+
+/* Inputs */
+input {
+    width: 100%;
+    padding: 14px 16px;
+    margin: 12px 0;
+    border: none;
+    border-radius: 12px;
+    font-size: 16px;
+    outline: none;
+    background: rgba(255,255,255,0.07);
+    color: #fff;
+    transition: all 0.3s ease;
+    box-sizing: border-box;
+    box-shadow: inset 0 0 6px rgba(0,0,0,0.6);
+}
+input:focus {
+    background: rgba(255,255,255,0.12);
+    box-shadow: 0 0 8px rgba(255,140,0,0.6);
+}
+
+/* Password wrapper */
+.password-wrapper {
+    position: relative;
+    width: 100%;
+}
+.togglePassword {
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    cursor: pointer;
+    font-size: 18px;
+    color: #ffa733;
+    transition: 0.3s;
+}
+.togglePassword:hover {
+    color: #ffbb55;
+}
+
+/* Buttons */
+button {
+    height: 42px;
+    width: 130px;
+    border: none;
+    border-radius: 12px;
+    background: linear-gradient(90deg, #ffa733, #ff7a18);
+    color: #121212;
+    font-size: 16px;
+    font-weight: bold;
+    margin: 10px 5px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+button:hover {
+    background: linear-gradient(90deg, #ffbb55, #ffa733);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 15px rgba(255,140,0,0.5);
+}
+button:active {
+    transform: scale(0.95);
+}
+
+/* Error + strength text */
+.error {
+    color: #ff6b6b;
+    font-size: 14px;
+    margin: 5px 0;
+    display: none;
+}
+.strength {
+    font-size: 14px;
+    margin: 5px 0;
+}
+.strength.weak { color: #ff4d4d; }
+.strength.medium { color: #ffa733; }
+.strength.strong { color: #4dff88; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="login-card">
+      <h1>Login - Kitchatty</h1>
+
+      <input type="text" id="usernameField" placeholder="Username">
+      <div class="error" id="usernameError">⚠️ Username must be at least 3 characters</div>
+
+      <div class="password-wrapper">
+          <input type="password" id="passwordField" placeholder="Password">
+          <span class="togglePassword">👁️</span>
+      </div>
+      <div class="strength" id="passwordStrength"></div>
+
+      <button id="loginBtn">Login</button>
+      <button id="signupBtn">Sign Up</button>
+
+      <div class="error" id="errorMsg"></div>
+  </div>
+</div>
+
+<script>
+const errorMsg = document.getElementById("errorMsg");
+const usernameError = document.getElementById("usernameError");
+const strengthDisplay = document.getElementById("passwordStrength");
+
+function showError(message) {
+    errorMsg.textContent = message;
+    errorMsg.style.display = "block";
+}
+
+document.getElementById("passwordField").addEventListener("input", (e) => {
+    const val = e.target.value;
+    let strength = "";
+    let className = "";
+
+    if (!val) { strengthDisplay.textContent = ""; return; }
+    if (val.length < 6) { strength = "Weak"; className = "weak"; }
+    else if (val.match(/[A-Z]/) && val.match(/[0-9]/) && val.length >= 8) { strength = "Strong"; className = "strong"; }
+    else { strength = "Medium"; className = "medium"; }
+
+    strengthDisplay.textContent = `Password Strength: ${strength}`;
+    strengthDisplay.className = `strength ${className}`;
+});
+
+async function createAccount() {
+  const username = document.getElementById("usernameField").value.trim();
+  const password = document.getElementById("passwordField").value;
+
+  if (!username || !password) {
+    showError("⚠️ Please enter username and password");
+    return;
+  }
+
+  try {
+    const response = await fetch("http://localhost:3000/users", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password, avatar: null }) // <-- Use `username` and `password`
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      showError(data.error || "⚠️ Could not create account.");
+      return;
+    }
+
+    alert("✅ Account created! You can now login.");
+    document.getElementById("usernameField").value = "";
+    document.getElementById("passwordField").value = "";
+    errorMsg.style.display = "none";
+  } catch (err) {
+    showError("⚠️ Server error. Make sure backend is running.");
+    console.error(err);
+  }
+}
+
+
+
+async function login() {
+  const username = document.getElementById("usernameField").value.trim();
+  const password = document.getElementById("passwordField").value;
+
+  if (!username || !password) {
+    showError("⚠️ Please fill in both fields.");
+    return;
+  }
+
+  try {
+    const response = await fetch("http://localhost:3000/users/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password }) // <-- Use `username` and `password`
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      showError(data.error || "❌ Login failed.");
+      return;
+    }
+
+    localStorage.setItem("loggedInUser", username);
+
+
+    showError("");
+    window.location.href = "index.html";
+  } catch (err) {
+    showError("⚠️ Could not connect to server.");
+    console.error(err);
+  }
+}
+
+
+
+// Event listeners
+document.getElementById("loginBtn").addEventListener("click", login);
+document.getElementById("signupBtn").addEventListener("click", createAccount);
+
+// Redirect if already logged in (prevents login loop)
+window.addEventListener("DOMContentLoaded", () => {
+    const loggedInUser = localStorage.getItem("loggedInUser");
+    if (loggedInUser && window.location.pathname.endsWith("login.html")) {
+        window.location.href = "index.html";
+    }
+});
+
+</script>
+
+</body>
+</html>

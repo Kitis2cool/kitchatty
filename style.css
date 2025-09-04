@@ -1,0 +1,664 @@
+/* ===== Base Layout ===== */
+body {
+  margin: 0;
+  display: flex;
+  height: 100vh;
+  font-family: "Segoe UI", Arial, sans-serif;
+  background: linear-gradient(135deg, #091f36, #0f2862);
+  color: #f5f5f5;
+  overflow: hidden;
+}
+
+#app {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+  transition: margin-right 0.4s ease;
+}
+
+#main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  margin-right: 0; /* sidebar hidden initially */
+  background: #091f36;
+  transition: margin-right 0.4s ease;
+}
+
+/* ===== Sidebar ===== */
+#sidebar {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 360px;
+  background: #0f1f38;
+  border-top-left-radius: 16px;
+  border-bottom-left-radius: 16px;
+  box-shadow: -3px 0 25px rgba(0,0,0,0.45);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  overflow-y: auto;
+  transform: translateX(100%);
+  opacity: 0; /* hide completely */
+  pointer-events: none; /* ignore clicks when hidden */
+  transition: all 0.4s ease;
+  z-index: 900; /* make sure it's above chat but below toggle button */
+}
+
+#sidebar.visible {
+  transform: translateX(0);
+  opacity: 1; /* show fully */
+  pointer-events: auto; /* allow clicks */
+}
+
+/* Scrollbar for sidebar */
+#sidebar::-webkit-scrollbar {
+  width: 8px;
+}
+#sidebar::-webkit-scrollbar-track {
+  background: #0f1f38;
+}
+#sidebar::-webkit-scrollbar-thumb {
+  background: #3a82f7;
+  border-radius: 4px;
+}
+
+#sidebar:hover {
+  box-shadow: -3px 0 35px rgba(0,0,0,0.55);
+}
+
+#sidebar h3 {
+  margin: 18px 0 10px;
+  font-size: 16px;
+  font-weight: bold;
+  color: #fff;
+  border-bottom: 1px solid #4f5f76;
+  padding-bottom: 6px;
+  letter-spacing: 0.5px;
+}
+/* Sidebar buttons */
+.sidebar-btn {
+  width: 100%;
+  padding: 12px;
+  margin-top: 8px;
+  border: none;
+  border-radius: 8px;
+  font-weight: bold;
+  color: #fff;
+  cursor: pointer;
+  background: linear-gradient(90deg, #386fa4, #2d4a7c);
+  transition: transform 0.2s, box-shadow 0.2s, filter 0.2s;
+}
+
+.sidebar-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 3px 10px rgba(56,111,164,0.4);
+  filter: brightness(1.1);
+}
+
+/* ===== Sidebar Toggle Button ===== */
+#toggleSidebar {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: #3a82f7;
+  border: none;
+  color: white;
+  font-size: 20px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.35);
+  transition: all 0.2s;
+  z-index: 1000;
+}
+
+#toggleSidebar:hover {
+  background: #2e6fd1;
+  transform: scale(1.1);
+}
+
+/* ===== Online Users ===== */
+.online-user {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 10px;
+  border-bottom: 1px solid rgba(255,255,255,0.1);
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.online-user:hover {
+  background: rgba(255,255,255,0.05);
+}
+
+.online-user.selected {
+  background: #3a82f7;
+  font-weight: 600;
+}
+
+.online-user .avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 2px solid #3a82f7;
+}
+
+.online-user .user-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+}
+
+.online-user .username {
+  font-weight: 500;
+  font-size: 14px;
+  color: #fff;
+}
+
+.online-user .last-seen {
+  font-size: 11px;
+  color: #aaa;
+}
+
+.online-user .admin-badge {
+  font-size: 10px;
+  font-weight: bold;
+  color: #ffcc00;
+  margin-left: auto;
+}
+
+/* ===== Badges ===== */
+.unread-badge {
+  background: #3a82f7;
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: bold;
+  padding: 2px 6px;
+  border-radius: 12px;
+  min-width: 18px;
+  text-align: center;
+  display: inline-block;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+  transition: all 0.2s;
+}
+
+/* ===== Friend Entries ===== */
+.friend-entry {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #1b3a73;
+  padding: 8px 12px;
+  border-radius: 12px;
+  margin-bottom: 6px;
+  transition: all 0.2s;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+}
+
+.friend-entry:hover {
+  background: #2a4d8c;
+  transform: translateX(2px);
+}
+
+.friend-entry .avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  margin-right: 8px;
+}
+.avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  margin-right: 8px;
+}
+.friend-entry button {
+  background: #3a82f7;
+  border: none;
+  border-radius: 6px;
+  padding: 4px 10px;
+  color: #fff;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.friend-entry button:hover {
+  background: #1e6cd1;
+}
+
+/* ===== Friend Controls ===== */
+#friendControls {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+#friendInput {
+  flex: 1;
+  padding: 8px;
+  border-radius: 6px;
+  border: 1px solid #333;
+  background: #091f36;
+  color: #fff;
+}
+
+#addFriendBtn, #toggleDiscoverBtn {
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: none;
+  background: linear-gradient(90deg, #386fa4, #2d4a7c);
+  color: #fff;
+  cursor: pointer;
+  font-weight: bold;
+}
+
+#addFriendBtn:hover, #toggleDiscoverBtn:hover {
+  filter: brightness(1.1);
+}
+
+/* ===== Chat All Button ===== */
+#chatAllBtn {
+  width: 100%;
+  padding: 12px;
+  margin-top: 14px;
+  border: none;
+  border-radius: 8px;
+  font-weight: bold;
+  cursor: pointer;
+  color: #fff;
+  background: linear-gradient(90deg, #9e363a, #7a272a);
+  transition: all 0.2s;
+}
+
+#chatAllBtn:hover {
+  transform: scale(1.05);
+  box-shadow: 0 3px 10px rgba(158,54,58,0.4);
+}
+
+/* ===== Chat Container ===== */
+#chatContainer {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(180deg, #091f36, #0f2862);
+  color: #f5f5f5;
+  margin-right: 0;
+  transition: all 0.4s ease;
+}
+
+#sidebar.visible ~ #chatContainer {
+  margin-right: 360px;
+}
+
+/* ===== Tabs ===== */
+#tabs {
+  display: flex;
+  background: #0f2862;
+  border-bottom: 1px solid #4f5f76;
+  padding: 6px 10px;
+  gap: 8px;
+}
+.action-btn {
+  padding: 4px 8px;
+  margin-left: 6px;
+  border: none;
+  border-radius: 6px;
+  background: linear-gradient(90deg, #386fa4, #2d4a7c);
+  color: #fff;
+  font-weight: bold;
+  cursor: pointer;
+  transition: transform .2s, box-shadow .2s;
+}
+
+.action-btn:hover {
+  box-shadow: 0 3px 10px rgba(56,111,164,0.4);
+}
+.actions {
+  display: flex;
+  align-items: center;
+}
+.tab {
+  padding: 8px 14px;
+  cursor: pointer;
+  background: rgba(15, 40, 98, 0.9);
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  color: #eee;
+  font-size: 14px;
+  font-weight: 500;
+  gap: 6px;
+  transition: all 0.2s;
+}
+
+.tab:hover {
+  background: #4f5f76;
+  transform: translateY(-2px);
+}
+
+.tab.active {
+  background: #091f36;
+  border-bottom: 3px solid #3a82f7;
+  font-weight: 600;
+  color: #fff;
+}
+
+.tab .close-btn {
+  margin-left: 8px;
+  color: #3a82f7;
+  font-size: 13px;
+  cursor: pointer;
+  transition: color 0.2s;
+}
+
+.tab .close-btn:hover {
+  color: #ff5c5c;
+}
+
+/* ===== Messages ===== */
+#notesList {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px;
+  overflow-y: auto;
+}
+
+.note-item {
+  max-width: 70%;
+  padding: 10px 14px;
+  border-radius: 16px;
+  font-size: 14px;
+  line-height: 1.4;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  box-shadow: 0 3px 6px rgba(0,0,0,0.25);
+  transition: transform 0.2s;
+}
+
+.note-item:hover {
+  transform: translateY(-2px);
+}
+
+.note-item img {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+}
+
+.note-item:not(.own-message) {
+  align-self: flex-start;
+  background: #4f5f76;
+  border-bottom-left-radius: 4px;
+}
+
+.own-message {
+  align-self: flex-end;
+  background: #0f2862;
+  border-bottom-right-radius: 4px;
+}
+
+.private-message {
+  background: #9e363a;
+  color: #fff;
+  align-self: center;
+  border-radius: 12px;
+  font-weight: bold;
+}
+
+.admin-message {
+  border: 2px solid #ffcc00;
+  background: #333366;
+  font-weight: bold;
+}
+
+.note-item button {
+  margin-left: 10px;
+  border: none;
+  border-radius: 6px;
+  background: #9e363a;
+  color: #fff;
+  padding: 4px 8px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.note-item button:hover {
+  background: #7a272a;
+}
+
+/* ===== Chat Bar ===== */
+#chatBar {
+  display: flex;
+  padding: 12px;
+  gap: 8px;
+  align-items: center;
+  background: rgba(15, 40, 98, 0.9);
+  border-top: 1px solid #333;
+  backdrop-filter: blur(6px);
+  border-radius: 0 0 12px 12px;
+}
+
+#username {
+  width: 110px;
+  padding: 6px;
+  border-radius: 8px;
+  border: 1px solid #333;
+  background: #091f36;
+  color: #fff;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+#noteInput {
+  flex: 1;
+  height: 38px;
+  padding: 0 12px;
+  font-size: 14px;
+  border-radius: 8px;
+  border: 1px solid #333;
+  background: #0f2862;
+  color: #fff;
+  transition: all 0.2s;
+}
+
+#noteInput:focus {
+  outline: none;
+  border-color: #3a82f7;
+  background: #091f36;
+}
+
+#sendBtn, #logoutBtn, #attachBtn {
+  height: 38px;
+  padding: 0 16px;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  font-weight: bold;
+  color: #fff;
+  background: #3a82f7;
+  transition: all 0.2s;
+}
+
+#sendBtn:hover, #logoutBtn:hover, #attachBtn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 3px 10px rgba(58,130,247,0.4);
+}
+
+/* ===== Misc ===== */
+.unread-holder {
+  display: flex;
+  align-items: center;
+  margin-left: 8px;
+}
+
+.help {
+  font-size: 12px;
+  color: #ccc;
+  margin-top: 8px;
+  line-height: 1.3;
+}
+
+.help a {
+  color: #3a82f7;
+}
+
+.timestamp {
+  font-size: 11px;
+  color: #aaa;
+  margin-left: 6px;
+}
+
+.typing-indicator {
+  font-size: 12px;
+  color: #5fa8d3;
+  margin-top: 4px;
+}
+
+/* ===== Modal (News) ===== */
+#newsOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+#newsModal {
+  width: min(600px, 90vw);
+  max-height: 80vh;
+  overflow-y: auto;
+  background: #0f2862;
+  color: #fff;
+  border-radius: 14px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+  padding: 18px 20px;
+}
+
+#newsModal header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+#newsModal h2 {
+  margin: 0 0 8px;
+}
+
+#closeNewsBtn {
+  border: none;
+  background: #9e363a;
+  color: #fff;
+  padding: 6px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+#dontShowNewsBtn {
+  border: none;
+  background: #4f5f76;
+  color: #fff;
+  padding: 6px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  margin-right: 8px;
+}
+
+.note-item {
+  position: relative;
+  padding-right: 25px; /* space for delete button */
+}
+
+.delete-btn {
+  position: absolute;
+  right: 5px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: transparent;
+  border: none;
+  color: #ff5555;
+  font-size: 14px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.note-item:hover .delete-btn {
+  opacity: 1;
+}
+/* Overlay */
+.admin-overlay {
+  position: fixed;
+  top:0; left:0;
+  width:100%; height:100%;
+  background: rgba(0,0,0,0.6);
+  z-index: 998;
+}
+
+/* Popup */
+.admin-popup {
+  position: fixed;
+  top:50%; left:50%;
+  transform: translate(-50%, -50%);
+  background:#1a1a1a;
+  padding:30px;
+  border-radius:16px;
+  width:320px;
+  max-width:90vw;
+  box-shadow:0 0 20px rgba(255,140,0,0.5);
+  color:white;
+  z-index: 999;
+}
+
+.admin-popup h2 {
+  color: #ffa733;
+  margin-bottom: 20px;
+}
+
+.admin-control {
+  margin-bottom: 15px;
+}
+
+.admin-control input {
+  margin:5px 0;
+  width:100%;
+  padding:8px;
+  border-radius:8px;
+  border:none;
+  outline:none;
+}
+
+.admin-control button {
+  margin-top:5px;
+  width:100%;
+  padding:8px;
+  border-radius:8px;
+  border:none;
+  background:#ffa733;
+  color:#121212;
+  cursor:pointer;
+  font-weight:bold;
+  transition:0.2s;
+}
+
+.admin-control button:hover {
+  background:#ffbb55;
+}

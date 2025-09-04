@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Friend System Test</title>
+  <style>
+    body {
+      background: #0f2862;
+      color: white;
+      font-family: Arial, sans-serif;
+      padding: 20px;
+    }
+
+    .friend-entry {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: #1b3a73;
+      padding: 8px 12px;
+      border-radius: 8px;
+      margin-bottom: 6px;
+    }
+
+    .avatar {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      margin-right: 8px;
+    }
+
+    .action-btn {
+      background: #2196f3;
+      border: none;
+      border-radius: 6px;
+      padding: 4px 10px;
+      color: white;
+      cursor: pointer;
+      font-size: 12px;
+    }
+    .action-btn:hover {
+      background: #0d8ae5;
+    }
+  </style>
+</head>
+<body>
+  <h2>Discover</h2>
+  <div id="discoverList"></div>
+
+  <script>
+    // Simulated state
+    const loggedInUser = "me";
+    const presence = { me: true, kitis2: true, kellen: true, ander: true };
+    const friendsAccepted = new Set(["someFriend"]);
+    const friendsPendingOut = new Set(["kellen"]);
+    const friendsRequestedIn = new Set(["ander"]);
+
+    // Fake sorter
+    function sortUsersByPresence(users) { return users; }
+
+    // Build user row
+    function buildUserRow(username, opts = {}) {
+      const div = document.createElement("div");
+      div.className = "friend-entry";
+
+      const left = document.createElement("div");
+      left.style.display = "flex";
+      left.style.alignItems = "center";
+
+      const avatar = document.createElement("img");
+      avatar.src = "https://i.pravatar.cc/32?u=" + username;
+      avatar.className = "avatar";
+
+      const name = document.createElement("span");
+      name.textContent = username;
+
+      left.appendChild(avatar);
+      left.appendChild(name);
+      div.appendChild(left);
+
+      const btnContainer = document.createElement("div");
+      (opts.buttons || []).forEach(b => {
+        const btn = document.createElement("button");
+        btn.textContent = b.text;
+        btn.className = "action-btn";
+        btn.onclick = b.onClick;
+        btnContainer.appendChild(btn);
+      });
+      div.appendChild(btnContainer);
+
+      return div;
+    }
+
+    // Your renderDiscover
+    function renderDiscover() {
+      const discoverList = document.getElementById("discoverList");
+      const allOnline = new Set(Object.keys(presence));
+      const notFriends = [...allOnline].filter(u => !friendsAccepted.has(u) && u !== loggedInUser);
+      const sorted = sortUsersByPresence(notFriends);
+
+      discoverList.innerHTML = "";
+
+      sorted.forEach((user) => {
+        const alreadyPending = friendsPendingOut.has(user);
+        const alreadyIncoming = friendsRequestedIn.has(user);
+
+        const row = buildUserRow(user, {
+          buttons: [
+            alreadyPending
+              ? { text: "Pending…", onClick: () => {} }
+              : alreadyIncoming
+              ? { text: "Accept", onClick: () => alert("Accepted " + user) }
+              : { text: "Add", onClick: () => alert("Sent request to " + user) }
+          ],
+        });
+
+        discoverList.appendChild(row);
+      });
+
+      if (!sorted.length) {
+        const msg = document.createElement("div");
+        msg.style.fontSize = "12px";
+        msg.style.color = "#ccc";
+        msg.textContent = "No one to discover right now.";
+        discoverList.appendChild(msg);
+      }
+    }
+
+    // Run once
+    renderDiscover();
+  </script>
+</body>
+</html>
