@@ -13,6 +13,8 @@ const initialSyncDone = Object.create(null);
 Array.from(notesList.querySelectorAll(".note-item")).forEach(el => {
   if (el.dataset.id) renderedMessageIds.add(String(el.dataset.id));
 });
+// ---------------- Backend URL ----------------
+const BASE_URL = "https://aec8aff58db5.ngrok-free.app";
 
 // Friend tracking
 let friendsPendingOut = [];
@@ -33,7 +35,7 @@ if (!loggedInUser) {
     // Mark user as online
     (async () => {
       try {
-        await fetch("http://localhost:3000/online-users", {
+        await fetch(`${BASE_URL}/online-users`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ username: loggedInUser, lastActive: Date.now() })
@@ -143,7 +145,7 @@ async function fetchFriends(username) {
   try {
     // --- Fetch friend list from server ---
     const res = await fetch(
-      `http://localhost:3000/friends?username=${encodeURIComponent(username)}`
+      `${BASE_URL}/friends?username=${encodeURIComponent(username)}`
     );
     if (!res.ok) {
       let errMsg = `Server returned ${res.status}`;
@@ -159,7 +161,7 @@ async function fetchFriends(username) {
     let onlineUsers = [];
     try {
       const onlineRes = await fetch(
-        `http://localhost:3000/online-users?loggedInUser=${encodeURIComponent(username)}`
+        `${BASE_URL}/online-users?loggedInUser=${encodeURIComponent(username)}`
       );
       if (onlineRes.ok) {
         const onlineData = await onlineRes.json();
@@ -212,7 +214,7 @@ async function fetchFriends(username) {
 // Respond to a friend request (accept or decline)
 async function respondToFriendRequest(fromUser, accept) {
   try {
-    await fetch('http://localhost:3000/respond-friend', {
+    await fetch(`${BASE_URL}/respond-friend`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ fromUser, toUser: loggedInUser, accept }),
@@ -227,7 +229,7 @@ async function respondToFriendRequest(fromUser, accept) {
 // Cancel a pending friend request
 async function cancelFriendRequest(user) {
   try {
-    await fetch('http://localhost:3000/cancel-friend', {
+    await fetch(`${BASE_URL}/cancel-friend`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ fromUser: loggedInUser, toUser: user }),
@@ -243,7 +245,7 @@ async function cancelFriendRequest(user) {
 async function removeFriend(user) {
   if (!confirm(`Remove ${user} from friends?`)) return;
   try {
-    await fetch('http://localhost:3000/remove-friend', {
+    await fetch(`${BASE_URL}/remove-friend`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ user1: loggedInUser, user2: user }),
@@ -335,7 +337,7 @@ document.addEventListener("DOMContentLoaded", () => {
       localStorage.setItem(`avatar_${loggedInUser}`, dataURL);
 
       // Let backend know user updated avatar
-      await fetch("http://localhost:3000/users", {
+      await fetch(`${BASE_URL}/users`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ loggedInUser }),
@@ -464,7 +466,7 @@ function createStyledButton(text, onClick) {
 // 🛠 Helper: call backend
 async function updateFriend(fromUser, toUser, action) {
   try {
-    await fetch("http://localhost:3000/friends", {
+    await fetch(`${BASE_URL}/friends`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ fromUser, toUser, action }),
@@ -484,7 +486,7 @@ logoutBtn.onclick = async () => {
 
   try {
     // Mark the user offline via your Node.js server
-    await fetch("http://localhost:3000/online-users", {
+    await fetch(`${BASE_URL}/online-users`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username: loggedInUser, online: false }),
@@ -667,7 +669,7 @@ async function sendFriendRequest(toUser) {
   if (!toUser || toUser === loggedInUser) return;
 
   try {
-    const res = await fetch("http://localhost:3000/friends/request", {
+    const res = await fetch(`${BASE_URL}/friends/request`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -709,7 +711,7 @@ async function goOnline() {
   if (!username) return; // skip if not logged in
 
   try {
-    await fetch("http://localhost:3000/online-users", {
+    await fetch(`${BASE_URL}/online-users`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -737,7 +739,7 @@ setInterval(goOnline, 30000);
 // Optional profile live updates for current user
 async function fetchUserProfile(username) {
   try {
-    const res = await fetch(`http://localhost:3000/users/${username}`);
+    const res = await fetch(`${BASE_URL}/users/${username}`);
     if (!res.ok) throw new Error("Failed to fetch profile");
     const data = await res.json();
 
@@ -814,7 +816,7 @@ newGroupBtn.onclick = async () => {
   const members = parseMembers(extra).filter(u => u !== loggedInUser);
 
   try {
-    const res = await fetch("http://localhost:3000/groups", {
+    const res = await fetch(`${BASE_URL}/groups`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -850,7 +852,7 @@ newGroupBtn.onclick = async () => {
 
 async function fetchGroups() {
   try {
-    const res = await fetch("http://localhost:3000/groups?username=" + encodeURIComponent(loggedInUser));
+    const res = await fetch(`${BASE_URL}/groups?username=` + encodeURIComponent(loggedInUser));
     if (!res.ok) throw new Error("Failed to fetch groups");
     const groups = await res.json();
 
@@ -907,7 +909,7 @@ async function fetchGroups() {
         const toAdd = parseMembers(raw).filter(Boolean);
         if (!toAdd.length) return;
         try {
-          await fetch(`http://localhost:3000/groups/${id}/invite`, {
+          await fetch(`${BASE_URL}/groups/${id}/invite`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ toAdd })
@@ -926,7 +928,7 @@ async function fetchGroups() {
         e.stopPropagation();
         if (!confirm(`Leave #${id}?`)) return;
         try {
-          await fetch(`http://localhost:3000/groups/${id}/leave`, {
+          await fetch(`${BASE_URL}/groups/${id}/leave`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ user: loggedInUser })
@@ -950,7 +952,7 @@ async function fetchGroups() {
           e.stopPropagation();
           if (!confirm(`Delete #${id} for everyone? This removes history.`)) return;
           try {
-            await fetch(`http://localhost:3000/groups/${id}`, { method: "DELETE" });
+            await fetch(`${BASE_URL}/groups/${id}`, { method: "DELETE" });
             if (activeTab === key) {
               activeTab = "all"; highlightActiveTab(); displayMessages();
             }
@@ -1167,7 +1169,7 @@ async function sendMessage() {
 
   // --- Send to server ---
   try {
-    const res = await fetch("http://localhost:3000/messages", {
+    const res = await fetch(`${BASE_URL}/messages`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(messagePayload),
@@ -1261,7 +1263,7 @@ function setupGroupListeners() {
 // Fetch messages for a group from server
 async function fetchGroupMessages(tabKey, groupId) {
   try {
-    const url = new URL("http://localhost:3000/messages");
+    const url = new URL(`${BASE_URL}/messages`);
     url.searchParams.set("tab", `group:${groupId}`);
     const res = await fetch(url.toString());
     if (!res.ok) throw new Error("Failed to fetch group messages");
@@ -1464,7 +1466,7 @@ async function autoDeleteMessage(msg) {
   if (!id) return;
 
   try {
-    const res = await fetch(`http://localhost:3000/messages/${encodeURIComponent(id)}`, {
+    const res = await fetch(`${BASE_URL}/messages/${encodeURIComponent(id)}`, {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
     });
@@ -1616,7 +1618,7 @@ function renderDeleteButton(msg) {
     try {
       const target = isGroupKey(msg.to) ? `group:${groupNameFromKey(msg.to)}` : msg.to;
 
-      const res = await fetch(`http://localhost:3000/messages/${encodeURIComponent(messageId)}`, {
+      const res = await fetch(`${BASE_URL}/messages/${encodeURIComponent(messageId)}`, {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ tab: target }),
@@ -1715,7 +1717,7 @@ attachBtn.onclick = async () => {
   };
 
   try {
-    const res = await fetch("http://localhost:3000/messages", {
+    const res = await fetch(`${BASE_URL}/messages`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
@@ -1728,7 +1730,7 @@ attachBtn.onclick = async () => {
     clearReply();
 
     // Optional: mark typing as false
-    await fetch("http://localhost:3000/presence", {
+    await fetch(`${BASE_URL}/presence`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username: loggedInUser, typing: false }),
@@ -1800,7 +1802,7 @@ messageInput.addEventListener("input", async () => {
   if (!isTyping) {
     isTyping = true;
     try {
-      await fetch("http://localhost:3000/presence", {
+      await fetch(`${BASE_URL}/presence`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username: loggedInUser, typing: true, lastUpdate: lastTyped })
@@ -1816,7 +1818,7 @@ setInterval(async () => {
   if (isTyping && Date.now() - lastTyped > TYPING_DELAY) {
     isTyping = false;
     try {
-      await fetch("http://localhost:3000/presence", {
+      await fetch(`${BASE_URL}/presence`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username: loggedInUser, typing: false, lastUpdate: Date.now() })
@@ -1831,7 +1833,7 @@ setInterval(async () => {
 async function watchAllTypingStatus() {
   const now = Date.now();
   try {
-    const res = await fetch("http://localhost:3000/presence");
+    const res = await fetch(`${BASE_URL}/presence`);
     const users = await res.json(); // [{username, typing, lastUpdate}, ...]
 
     const activeTyping = users
@@ -1888,7 +1890,7 @@ async function watchMessages(target) {
   const isInitial = !initialSyncDone[target];
 
   try {
-    const res = await fetch(`http://localhost:3000/messages?target=${encodeURIComponent(target)}`);
+    const res = await fetch(`${BASE_URL}/messages?target=${encodeURIComponent(target)}`);
     if (!res.ok) return;
 
     const messages = await res.json();
