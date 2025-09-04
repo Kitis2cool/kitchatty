@@ -1,21 +1,22 @@
-import express from "express";
-import cors from "cors";
-import pkg from "pg";
-const { Pool } = pkg;
-import bcrypt from "bcrypt";
-import pg from "pg"; // or your query wrapper
+// ---------------- Imports ----------------
+const express = require("express");
+const cors = require("cors");
+const { Pool } = require("pg");
+const bcrypt = require("bcrypt");
+
 const app = express();
 app.use(cors());
 app.use(express.json());
 
 // ---------------- PostgreSQL Connection ----------------
 const pool = new Pool({
-  host: "127.0.0.1",
+  host: "127.0.0.1", // Replace with Railway host when deploying
   port: 5432,
   user: "postgres",
   password: "",
   database: "kitchatty",
 });
+
 
 // ---------------- Helper ----------------
 async function query(text, params) {
