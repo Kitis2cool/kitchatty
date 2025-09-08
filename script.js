@@ -14,7 +14,7 @@ Array.from(notesList.querySelectorAll(".note-item")).forEach(el => {
   if (el.dataset.id) renderedMessageIds.add(String(el.dataset.id));
 });
 // ---------------- Backend URL ----------------
-const BASE_URL = "https://aec8aff58db5.ngrok-free.app";
+const BASE_URL = "https://kitchatty.loca.lt";
 
 // Friend tracking
 let friendsPendingOut = [];
@@ -76,7 +76,7 @@ async function upsertUser(userId) {
 window.onload = () => {
   if (loggedInUser) {
     watchMessages("all");
-    setInterval(() => watchMessages("all"), 3000); // Refresh every 3s
+    setInterval(() => watchMessages("all"), 2000); // Refresh every 3s
   }
 };
 
@@ -705,25 +705,36 @@ toggleDiscoverBtn.onclick = () => {
   discoverList.style.display = isHidden ? "block" : "none";
 };
 
-// Call this to mark yourself online immediately and start updating every 30 seconds
 async function goOnline() {
   const username = localStorage.getItem("loggedInUser");
   if (!username) return; // skip if not logged in
 
-  try {
-    await fetch(`${BASE_URL}/online-users`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        username,
-        lastActive: Date.now(),
-        typing: false,
-      }),
-    });
-  } catch (err) {
-    console.error("Failed to update online status:", err);
+  async function updateStatus() {
+    try {
+      await fetch(`${BASE_URL}/online-users`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          username,
+          lastActive: Date.now(),
+          avatar: null,   // or pull from your UI/avatar system
+          typing: false
+        }),
+      });
+    } catch (err) {
+      console.error("Failed to update online status:", err);
+    }
   }
+
+  // Mark online immediately
+  await updateStatus();
+
+  // Update every 30 seconds
+  setInterval(updateStatus, 30000);
 }
+
+// Call this when the page loads
+goOnline();
 
 
 // call every 30s
@@ -1883,18 +1894,36 @@ function findMatchingTemp(mapped) {
 
 
 
-// ---------------- Watch Messages (safe polling) ----------------
-async function watchMessages(target) {
-  if (!target || !notesList) return;
+// ---------------- Watch Messages (safe polling, all messages) ----------------
+async function watchMessages() {
+  if (!notesList) return;
 
+  const target = "all"; // always fetch global messages
   const isInitial = !initialSyncDone[target];
 
   try {
     const res = await fetch(`${BASE_URL}/messages?target=${encodeURIComponent(target)}`);
-    if (!res.ok) return;
 
-    const messages = await res.json();
-    if (!Array.isArray(messages)) return;
+    // Attempt to parse JSON safely
+    let messages;
+    const contentType = res.headers.get("content-type");
+
+    if (!res.ok) {
+      console.warn("Failed to fetch messages, status:", res.status);
+      return;
+    }
+
+    if (contentType && contentType.includes("application/json")) {
+      messages = await res.json();
+      if (!Array.isArray(messages)) {
+        console.warn("Messages response is not an array:", messages);
+        return;
+      }
+    } else {
+      const text = await res.text();
+      console.warn("Expected JSON but got non-JSON response:", text);
+      return;
+    }
 
     messages.forEach(msg => {
       if (!msg || typeof msg !== "object") return;
@@ -1906,53 +1935,50 @@ async function watchMessages(target) {
         text: msg.text || "",
         fileURL: msg.file_url || null,
         fileName: msg.file_name || null,
-        replyTo: msg.reply_to || null,
+        replyTo: msg.reply_to ?? null,
         timestamp: msg.timestamp ? Number(msg.timestamp) : Date.now()
       };
 
       if (!mapped.from || !mapped.to) return;
+
       const isMine = mapped.from === loggedInUser;
 
-      // --- Look for a temp bubble to replace ---
+      // --- Replace temp bubble if exists ---
       const tempEl = Array.from(notesList.querySelectorAll(".note-item"))
-        .find(el => el.dataset.id.startsWith("temp-") &&
-                    el.dataset.from === mapped.from &&
-                    el.dataset.to === mapped.to &&
-                    (el.querySelector(".note-content")?.textContent || "") === (mapped.text || mapped.fileURL || "") &&
-                    Math.abs(Number(el.dataset.timestamp) - mapped.timestamp) < 5000);
+        .find(el =>
+          el.dataset.id.startsWith("temp-") &&
+          el.dataset.from === mapped.from &&
+          el.dataset.to === mapped.to &&
+          (el.querySelector(".note-content")?.textContent || "") === (mapped.text || mapped.fileURL || "") &&
+          Math.abs(Number(el.dataset.timestamp) - mapped.timestamp) < 5000
+        );
 
       if (tempEl) {
-        // Replace temp with real message ID
         renderedMessageIds.delete(tempEl.dataset.id);
         tempEl.dataset.id = mapped.id;
         tempEl.dataset.timestamp = String(mapped.timestamp);
         renderedMessageIds.add(mapped.id);
-        return; // ✅ No duplicate
+        return;
       }
 
-      // --- Already rendered? skip ---
+      // --- Skip if already rendered ---
       if (renderedMessageIds.has(mapped.id) ||
           notesList.querySelector(`[data-id="${CSS.escape(mapped.id)}"]`)) {
         return;
       }
 
-      // --- Own message: only render if no temp found or initial load (history) ---
+      // --- Own messages: render only if initial load ---
       if (isMine && !isInitial) return;
 
-      // --- Others' messages: always render ---
       renderMessage(mapped);
     });
 
   } catch (err) {
-    console.error("Error while fetching messages:", err);
+    console.error("Error fetching messages:", err);
   } finally {
     initialSyncDone[target] = true;
   }
 }
-
-
-
-
 
 
 
