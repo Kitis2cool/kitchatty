@@ -9,13 +9,15 @@ app.use(cors());
 app.use(express.json());
 
 // ---------------- PostgreSQL Connection ----------------
+// require('dotenv').config();
 const pool = new Pool({
-  host: "127.0.0.1",
-  port: 5432,
-  user: "postgres",
-  password: "",
-  database: "kitchatty",
+  user: process.env.DB_USER || "kitis",
+  host: process.env.DB_HOST || "localhost",
+  database: process.env.DB_NAME || "kitchatty",
+  password: process.env.DB_PASSWORD || "kitis",
+  port: parseInt(process.env.DB_PORT) || 5432
 });
+
 // ---------------- Backend URL ----------------
 
 
@@ -116,20 +118,21 @@ app.get("/presence", async (req, res) => {
 
 app.use(express.json());
 
-// Create a new account
-
-
 // ---------------- Create User ----------------
 app.post("/users", async (req, res) => {
-  const { username, password, avatar } = req.body;
-
-  if (!username || !password) {
-    return res.status(400).json({ error: "Missing username or password" });
-  }
-
   try {
+    let { id, password, avatar } = req.body;
+
+    // Ensure id and password are strings
+    id = String(id || "").trim();
+    password = String(password || "");
+
+    if (!id || !password) {
+      return res.status(400).json({ error: "Missing username or password" });
+    }
+
     // Check if username already exists
-    const existing = await query("SELECT id FROM users WHERE id=$1", [username]);
+    const existing = await query("SELECT id FROM users WHERE id=$1", [id]);
     if (existing.rows.length > 0) {
       return res.status(400).json({ error: "Username already exists" });
     }
@@ -141,7 +144,7 @@ app.post("/users", async (req, res) => {
     await query(
       `INSERT INTO users (id, avatar, password, created_at)
        VALUES ($1, $2, $3, $4)`,
-      [username, avatar || null, hashedPassword, Date.now()]
+      [id, avatar || null, hashedPassword, Date.now()]
     );
 
     res.json({ success: true, message: "Account created successfully" });
@@ -154,27 +157,22 @@ app.post("/users", async (req, res) => {
 
 
 // ---------------- Login ----------------
+// Login route
 app.post("/users/login", async (req, res) => {
-  const { username, password } = req.body;
-
-  if (!username || !password) {
-    return res.status(400).json({ error: "Missing username or password" });
-  }
+  const { id, password } = req.body; // <-- match signup
+  if (!id || !password) return res.status(400).json({ error: "Missing username or password" });
 
   try {
-    const result = await query("SELECT password FROM users WHERE id=$1", [username]);
+    const result = await query("SELECT password FROM users WHERE id=$1", [id]);
     if (!result.rows.length) return res.status(401).json({ error: "User not found" });
 
     const hashedPassword = result.rows[0].password;
-    if (!hashedPassword) return res.status(500).json({ error: "No password set for this user" });
-
     const match = await bcrypt.compare(password, hashedPassword);
-
     if (!match) return res.status(401).json({ error: "Incorrect password" });
 
     res.json({ success: true, message: "Login successful" });
   } catch (err) {
-    console.error("Database error:", err);
+    console.error(err);
     res.status(500).json({ error: "Database error" });
   }
 });
@@ -377,19 +375,34 @@ app.post("/messages", async (req, res) => {
 
 app.get("/messages", async (req, res) => {
   const { target } = req.query;
-  if (!target) return res.status(400).send({ error: "Missing target" });
+
+  if (!target) return res.status(400).json({ error: "Missing target" });
 
   try {
-    const result = await query(
-      "SELECT * FROM messages WHERE to_target=$1 ORDER BY timestamp ASC",
-      [target]
-    );
+    let result;
+    if (target === "all") {
+      // get all messages
+      result = await query(
+        `SELECT * FROM messages ORDER BY timestamp ASC`
+      );
+    } else {
+      // get messages for specific target or global
+      result = await query(
+        `SELECT * FROM messages 
+         WHERE to_target = $1 OR to_target = 'all' 
+         ORDER BY timestamp ASC`,
+        [target]
+      );
+    }
+
     res.json(result.rows);
   } catch (err) {
     console.error(err);
-    res.status(500).send({ error: "Database error" });
+    res.status(500).json({ error: "Database error" });
   }
 });
+
+
 
 app.delete("/messages/:id", async (req, res) => {
   const { id } = req.params;
@@ -400,6 +413,16 @@ app.delete("/messages/:id", async (req, res) => {
     console.error("Failed to delete message on server:", err);
     res.status(500).send({ error: "Database error" });
   }
+});
+// At the bottom of server.js
+app.use((err, req, res, next) => {
+  console.error("Server error:", err);
+  res.status(500).json({ error: "Internal server error" });
+});
+
+// Handle 404s
+app.use((req, res) => {
+  res.status(404).json({ error: "Not found" });
 });
 
 // ---------------- Start Server ----------------
