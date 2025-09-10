@@ -133,10 +133,10 @@ async function fetchFriends(username) {
   // Validate username
   if (!username?.trim()) {
     console.warn("fetchFriends called without username");
-    window.friendsCache = { enrichedAccepted: [], friendsRequestedIn: [] };
+    window.friendsCache = { enrichedAccepted: [], friendsRequestedIn: [], friendsAccepted: [] };
     return {
-      friendsAccepted: new Set(),
-      friendsRequestedIn: new Set(),
+      friendsAccepted: [],
+      friendsRequestedIn: [],
       all: [],
       enrichedAccepted: [],
     };
@@ -181,28 +181,28 @@ async function fetchFriends(username) {
     // --- Cache globally for UI rendering ---
     window.friendsCache = {
       enrichedAccepted,
+      friendsAccepted: Array.isArray(data.friendsAccepted) ? data.friendsAccepted : [],
       friendsRequestedIn: Array.isArray(data.friendsRequestedIn) ? data.friendsRequestedIn : [],
     };
 
     return {
-      friendsAccepted: new Set(enrichedAccepted.map(f => f.username)),
-      friendsRequestedIn: new Set(
-        Array.isArray(data.friendsRequestedIn) ? data.friendsRequestedIn : []
-      ),
+      friendsAccepted: Array.isArray(data.friendsAccepted) ? data.friendsAccepted : [],
+      friendsRequestedIn: Array.isArray(data.friendsRequestedIn) ? data.friendsRequestedIn : [],
       all: Array.isArray(data.rows) ? data.rows : [],
       enrichedAccepted,
     };
   } catch (err) {
     console.error("Failed to fetch friends:", err);
-    window.friendsCache = { enrichedAccepted: [], friendsRequestedIn: [] };
+    window.friendsCache = { enrichedAccepted: [], friendsAccepted: [], friendsRequestedIn: [] };
     return {
-      friendsAccepted: new Set(),
-      friendsRequestedIn: new Set(),
+      friendsAccepted: [],
+      friendsRequestedIn: [],
       all: [],
       enrichedAccepted: [],
     };
   }
 }
+
 
 
 
@@ -286,25 +286,44 @@ function fileToDataURL(file) {
 // ---------------- Refresh Friends UI ----------------
 async function refreshFriends() {
   const username = localStorage.getItem("loggedInUser");
-  if (!username) {
-    console.warn("Skipping refreshFriends: no logged-in user");
-    return;
-  }
+  if (!username) return;
 
   try {
-    const friendsData = await fetchFriends(username);
-    window.enrichedAccepted = friendsData.enrichedAccepted;
-    renderFriends();
+    const res = await fetch(`${BASE_URL}/friends?username=${encodeURIComponent(username)}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+    const data = await res.json();
+    console.log("Friends data:", data);
+
+    const friendsListEl = document.getElementById("friends-list");
+    const requestsListEl = document.getElementById("friend-requests-list");
+
+    if (friendsListEl) friendsListEl.innerHTML = "";
+    if (requestsListEl) requestsListEl.innerHTML = "";
+
+    // Render accepted friends
+    data.friendsAccepted.forEach(friend => {
+      const li = document.createElement("li");
+      li.textContent = friend;
+      friendsListEl.appendChild(li);
+    });
+
+    // Render incoming friend requests
+    data.friendsRequestedIn.forEach(friend => {
+      const li = document.createElement("li");
+      li.textContent = `${friend} (pending)`;
+      requestsListEl.appendChild(li);
+    });
+
   } catch (err) {
-    console.error("Error fetching friends:", err);
+    console.error("Failed to refresh friends:", err);
   }
 }
 
-// Initial fetch
+// Call once on load and maybe poll
 refreshFriends();
+setInterval(refreshFriends, 15000);
 
-// Poll every 5s
-setInterval(refreshFriends, 5000);
 
 
 // ---- Avatar handling ----
@@ -371,7 +390,7 @@ function buildUserRow(user, opts = {}) {
 
   // Info
   const info = document.createElement("span");
-  info.style.color = meta.online ? 'limegreen' : 'gray';
+  info.style.color = meta.online ? "limegreen" : "gray";
   const username = document.createElement("strong");
   username.textContent = user + " ";
   const status = document.createElement("span");
@@ -395,26 +414,56 @@ function buildUserRow(user, opts = {}) {
 
   // 🔥 Friend system buttons
   if (user !== loggedInUser) {
-    const { friendsAccepted = [], friendsRequestedIn = [] } = window.friendsCache || {};
+    const {
+      friendsAccepted = [],
+      friendsRequestedIn = [],
+      friendsPendingOut = [],
+    } = window.friendsCache || {};
 
     if (friendsAccepted.includes(user)) {
+      // Already friends
       const removeBtn = createStyledButton("Remove Friend", async () => {
         await updateFriend(loggedInUser, user, "remove");
+        await fetchFriends(loggedInUser);
+        renderFriends();
       });
       right.appendChild(removeBtn);
+
     } else if (friendsRequestedIn.includes(user)) {
+      // They sent you a request
       const acceptBtn = createStyledButton("Accept", async () => {
         await updateFriend(loggedInUser, user, "accept");
+        await fetchFriends(loggedInUser);
+        renderFriends();
       });
       right.appendChild(acceptBtn);
 
       const rejectBtn = createStyledButton("Reject", async () => {
         await updateFriend(loggedInUser, user, "remove");
+        await fetchFriends(loggedInUser);
+        renderFriends();
       });
       right.appendChild(rejectBtn);
+
+    } else if (friendsPendingOut.includes(user)) {
+      // You already sent a request
+      const pendingBtn = createStyledButton("Pending…", () => {});
+      pendingBtn.disabled = true;
+      right.appendChild(pendingBtn);
+
+      const cancelBtn = createStyledButton("Cancel", async () => {
+        await updateFriend(loggedInUser, user, "remove");
+        await fetchFriends(loggedInUser);
+        renderFriends();
+      });
+      right.appendChild(cancelBtn);
+
     } else {
+      // Not connected yet
       const addBtn = createStyledButton("Add Friend", async () => {
         await updateFriend(loggedInUser, user, "send");
+        await fetchFriends(loggedInUser);
+        renderFriends();
       });
       right.appendChild(addBtn);
     }
@@ -430,6 +479,7 @@ function buildUserRow(user, opts = {}) {
 
   return div;
 }
+
 
 // 🛠 Helper: create styled button
 function createStyledButton(text, onClick) {
@@ -658,37 +708,162 @@ function renderDiscover() {
 }
 
 
+// ================= Sidebar Refresh =================
+async function refreshSidebar() {
+  const username = localStorage.getItem("loggedInUser");
+  if (!username) return;
 
+  // Elements
+  const friendsListEl = document.getElementById("friends-list");
+  const requestsListEl = document.getElementById("friend-requests-list");
+  const discoverListEl = document.getElementById("discover-list");
+  const groupsListEl = document.getElementById("groups-list");
+
+  if (!friendsListEl || !requestsListEl || !discoverListEl || !groupsListEl) return;
+
+  // Clear current lists
+  friendsListEl.innerHTML = "";
+  requestsListEl.innerHTML = "";
+  discoverListEl.innerHTML = "";
+  groupsListEl.innerHTML = "";
+
+  try {
+    // ---------- Fetch friends ----------
+    const friendsRes = await fetch(`${BASE_URL}/friends?username=${encodeURIComponent(username)}`);
+    if (!friendsRes.ok) throw new Error(`Friends fetch failed: ${friendsRes.status}`);
+    const friendsData = await friendsRes.json();
+
+    console.log("Friends data:", friendsData);
+
+    // --- Accepted friends ---
+    const accepted = friendsData.friendsAccepted;
+    if (accepted.length === 0) {
+      const li = document.createElement("li");
+      li.textContent = "No friends yet.";
+      friendsListEl.appendChild(li);
+    } else {
+      sortUsersByPresence(accepted).forEach(friend => {
+        const li = document.createElement("li");
+        const online = presence[friend]?.lastActive && Date.now() - presence[friend].lastActive <= 60_000;
+        li.textContent = friend + (online ? " (online)" : "");
+        friendsListEl.appendChild(li);
+      });
+    }
+
+    // --- Incoming friend requests ---
+    const requests = friendsData.friendsRequestedIn;
+    if (requests.length === 0) {
+      const li = document.createElement("li");
+      li.textContent = "No requests.";
+      requestsListEl.appendChild(li);
+    } else {
+      requests.forEach(friend => {
+        const li = document.createElement("li");
+        li.textContent = `${friend} (pending) `;
+
+        const acceptBtn = document.createElement("button");
+        acceptBtn.textContent = "Accept";
+        acceptBtn.onclick = async () => {
+          await sendFriendRequest(friend, "accept");
+          refreshSidebar();
+        };
+
+        const removeBtn = document.createElement("button");
+        removeBtn.textContent = "Remove";
+        removeBtn.onclick = async () => {
+          await sendFriendRequest(friend, "remove");
+          refreshSidebar();
+        };
+
+        li.appendChild(acceptBtn);
+        li.appendChild(removeBtn);
+        requestsListEl.appendChild(li);
+      });
+    }
+
+    // ---------- Fetch discoverable users ----------
+    const discoverRes = await fetch(`${BASE_URL}/discover?username=${encodeURIComponent(username)}`);
+    if (!discoverRes.ok) throw new Error(`Discover fetch failed: ${discoverRes.status}`);
+    const discoverData = await discoverRes.json();
+    console.log("Discover data:", discoverData);
+
+    const knownFriends = new Set(accepted);
+    if (!discoverData.users || discoverData.users.length === 0) {
+      const li = document.createElement("li");
+      li.textContent = "No users to discover.";
+      discoverListEl.appendChild(li);
+    } else {
+      sortUsersByPresence(discoverData.users.map(u => u.username))
+        .filter(u => !knownFriends.has(u))
+        .forEach(user => {
+          const li = document.createElement("li");
+          const online = presence[user]?.lastActive && Date.now() - presence[user].lastActive <= 60_000;
+          li.textContent = user + (online ? " (online)" : "");
+
+          const addBtn = document.createElement("button");
+          addBtn.textContent = "Add";
+          addBtn.onclick = () => sendFriendRequest(user, "send");
+
+          li.appendChild(addBtn);
+          discoverListEl.appendChild(li);
+        });
+    }
+
+    // ---------- Render groups ----------
+    if (window.myGroups && myGroups.size > 0) {
+      Array.from(myGroups).forEach(group => {
+        const li = document.createElement("li");
+        li.textContent = `#${group}`;
+        groupsListEl.appendChild(li);
+      });
+    } else {
+      const li = document.createElement("li");
+      li.textContent = "No groups.";
+      groupsListEl.appendChild(li);
+    }
+
+  } catch (err) {
+    console.error("Sidebar refresh error:", err);
+  }
+}
+
+// Call once on load and poll every 15 seconds
+refreshSidebar();
+setInterval(refreshSidebar, 15000);
+
+// ---------- Send friend request ----------
 async function sendFriendRequest(toUser) {
-  const loggedInUser = localStorage.getItem("loggedInUser");
-  if (!loggedInUser) {
-    alert("You must be logged in to send friend requests.");
+  const fromUser = localStorage.getItem("loggedInUser");
+  if (!fromUser || !toUser) {
+    console.error("Missing fromUser or toUser", { fromUser, toUser });
     return;
   }
 
-  if (!toUser || toUser === loggedInUser) return;
+  console.log("Sending friend request:", { from: fromUser, to: toUser });
 
   try {
-    const res = await fetch(`${BASE_URL}/friends/request`, {
+    const res = await fetch(`${BASE_URL}/friends`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        fromUser: loggedInUser,
-        toUser: toUser
-      }),
+      body: JSON.stringify({ from: fromUser, to: toUser })
     });
 
-    if (!res.ok) {
-      const errData = await res.json().catch(() => ({}));
-      throw new Error(errData.error || `Server returned ${res.status}`);
-    }
-
-    console.log(`Friend request sent from ${loggedInUser} to ${toUser}`);
+    if (!res.ok) throw new Error(`Friend request failed: ${res.status}`);
+    console.log(`Friend request sent from ${fromUser} to ${toUser}`);
+    refreshSidebar();
   } catch (err) {
-    console.error("Failed to send friend request:", err);
-    alert("Failed to send friend request. Check console for details.");
+    console.error(err);
   }
 }
+
+
+
+// ---------- Initial call and polling ----------
+refreshSidebar();
+setInterval(refreshSidebar, 15000);
+
+
+
 
 
 
@@ -1894,96 +2069,96 @@ function findMatchingTemp(mapped) {
 
 
 
-// ---------------- Watch Messages (safe polling, all messages) ----------------
+// ================= Helper: fetch with timeout and JSON check =================
+async function fetchJSON(url, options = {}, timeout = 7000) {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeout);
+
+  try {
+    const res = await fetch(url, { ...options, signal: controller.signal });
+    clearTimeout(id);
+
+    const contentType = res.headers.get("content-type") || "";
+    if (!res.ok || !contentType.includes("application/json")) {
+      const text = await res.text();
+      throw new Error(`Expected JSON but got ${res.status}: ${text.slice(0, 200)}`);
+    }
+
+    const json = await res.json();
+    if (!Array.isArray(json)) {
+      throw new Error(`JSON response is not an array: ${JSON.stringify(json)}`);
+    }
+
+    return json;
+  } catch (err) {
+    clearTimeout(id);
+    console.error("Fetch error:", err);
+    return null;
+  }
+}
+
+// ================= Watch Messages (safe polling, all messages) =================
 async function watchMessages() {
   if (!notesList) return;
 
   const target = "all"; // always fetch global messages
   const isInitial = !initialSyncDone[target];
 
-  try {
-    const res = await fetch(`${BASE_URL}/messages?target=${encodeURIComponent(target)}`);
+  const messages = await fetchJSON(`${BASE_URL}/messages?target=${encodeURIComponent(target)}`);
+  if (!messages) return;
 
-    // Attempt to parse JSON safely
-    let messages;
-    const contentType = res.headers.get("content-type");
+  messages.forEach(msg => {
+    if (!msg || typeof msg !== "object") return;
 
-    if (!res.ok) {
-      console.warn("Failed to fetch messages, status:", res.status);
+    const mapped = {
+      id: String(msg.id),
+      from: msg.from_user || "",
+      to: msg.to_target || "",
+      text: msg.text || "",
+      fileURL: msg.file_url || null,
+      fileName: msg.file_name || null,
+      replyTo: msg.reply_to ?? null,
+      timestamp: msg.timestamp ? Number(msg.timestamp) : Date.now()
+    };
+
+    if (!mapped.from || !mapped.to) return;
+
+    const isMine = mapped.from === loggedInUser;
+
+    // --- Replace temp bubble if exists ---
+    const tempEl = Array.from(notesList.querySelectorAll(".note-item"))
+      .find(el =>
+        el.dataset.id.startsWith("temp-") &&
+        el.dataset.from === mapped.from &&
+        el.dataset.to === mapped.to &&
+        (el.querySelector(".note-content")?.textContent || "") === (mapped.text || mapped.fileURL || "") &&
+        Math.abs(Number(el.dataset.timestamp) - mapped.timestamp) < 5000
+      );
+
+    if (tempEl) {
+      renderedMessageIds.delete(tempEl.dataset.id);
+      tempEl.dataset.id = mapped.id;
+      tempEl.dataset.timestamp = String(mapped.timestamp);
+      renderedMessageIds.add(mapped.id);
       return;
     }
 
-    if (contentType && contentType.includes("application/json")) {
-      messages = await res.json();
-      if (!Array.isArray(messages)) {
-        console.warn("Messages response is not an array:", messages);
-        return;
-      }
-    } else {
-      const text = await res.text();
-      console.warn("Expected JSON but got non-JSON response:", text);
+    // --- Skip if already rendered ---
+    if (renderedMessageIds.has(mapped.id) ||
+        notesList.querySelector(`[data-id="${CSS.escape(mapped.id)}"]`)) {
       return;
     }
 
-    messages.forEach(msg => {
-      if (!msg || typeof msg !== "object") return;
+    // --- Own messages: render only if initial load ---
+    if (isMine && !isInitial) return;
 
-      const mapped = {
-        id: String(msg.id),
-        from: msg.from_user || "",
-        to: msg.to_target || "",
-        text: msg.text || "",
-        fileURL: msg.file_url || null,
-        fileName: msg.file_name || null,
-        replyTo: msg.reply_to ?? null,
-        timestamp: msg.timestamp ? Number(msg.timestamp) : Date.now()
-      };
+    renderMessage(mapped);
+  });
 
-      if (!mapped.from || !mapped.to) return;
-
-      const isMine = mapped.from === loggedInUser;
-
-      // --- Replace temp bubble if exists ---
-      const tempEl = Array.from(notesList.querySelectorAll(".note-item"))
-        .find(el =>
-          el.dataset.id.startsWith("temp-") &&
-          el.dataset.from === mapped.from &&
-          el.dataset.to === mapped.to &&
-          (el.querySelector(".note-content")?.textContent || "") === (mapped.text || mapped.fileURL || "") &&
-          Math.abs(Number(el.dataset.timestamp) - mapped.timestamp) < 5000
-        );
-
-      if (tempEl) {
-        renderedMessageIds.delete(tempEl.dataset.id);
-        tempEl.dataset.id = mapped.id;
-        tempEl.dataset.timestamp = String(mapped.timestamp);
-        renderedMessageIds.add(mapped.id);
-        return;
-      }
-
-      // --- Skip if already rendered ---
-      if (renderedMessageIds.has(mapped.id) ||
-          notesList.querySelector(`[data-id="${CSS.escape(mapped.id)}"]`)) {
-        return;
-      }
-
-      // --- Own messages: render only if initial load ---
-      if (isMine && !isInitial) return;
-
-      renderMessage(mapped);
-    });
-
-  } catch (err) {
-    console.error("Error fetching messages:", err);
-  } finally {
-    initialSyncDone[target] = true;
-  }
+  initialSyncDone[target] = true;
 }
 
-
-
-
-// Optionally poll for new messages every few seconds
-setInterval(() => watchMessages(activeTab), 2000);
+// ================= Polling =================
+setInterval(watchMessages, 2000); // automatically fetches all messages every 2 seconds
 
 
