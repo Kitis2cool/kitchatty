@@ -27,7 +27,7 @@ let isAdmin = false;
 // Logged-in user
 const loggedInUser = localStorage.getItem("loggedInUser");
 window.loggedInUser = localStorage.getItem("loggedInUser");
-
+const mutedUsers = new Set();
 if (!loggedInUser) {
     console.warn("No logged-in user, redirecting...");
     window.location.href = "login.html";
@@ -373,99 +373,139 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 });
 
+// ========================= Build User Row =========================
 function buildUserRow(user, opts = {}) {
-  const savedAvatar = localStorage.getItem(`avatar_${user}`);
-  const defaultAvatar = `https://i.pravatar.cc/30?u=${user}`;
-  const meta = presence[user] || { lastActive: 0, online: false };
+  const userId = user.id || user; // support both id and legacy username
   const loggedInUser = localStorage.getItem("loggedInUser");
 
+  // Avatar
+  const savedAvatar = localStorage.getItem(`avatar_${userId}`);
+  const defaultAvatar = user.avatar || `https://i.pravatar.cc/40?u=${userId}`;
+
+  // Presence info
+  const meta = presence[userId] || { lastActive: 0, online: false };
+
+  // Row container
   const div = document.createElement("div");
   div.className = "online-user";
-  div.dataset.user = user;
+  div.dataset.user = userId;
 
-  // Avatar
+  // Avatar element
   const avatar = document.createElement("img");
   avatar.src = savedAvatar || defaultAvatar;
   avatar.className = "avatar";
 
-  // Info
+  // Info container
   const info = document.createElement("span");
   info.style.color = meta.online ? "limegreen" : "gray";
-  const username = document.createElement("strong");
-  username.textContent = user + " ";
-  const status = document.createElement("span");
-  status.textContent = meta.online
+
+  const nameEl = document.createElement("strong");
+  nameEl.textContent = user.username || userId + " ";
+
+  const statusEl = document.createElement("span");
+  statusEl.textContent = meta.online
     ? "online"
-    : `(last seen ${timeAgo(meta.lastActive)})`;
-  status.style.fontWeight = "normal";
-  info.appendChild(username);
-  info.appendChild(status);
+    : meta.lastActive
+      ? `(last seen ${timeAgo(meta.lastActive)})`
+      : "(never seen)";
+  statusEl.style.fontWeight = "normal";
+
+  info.appendChild(nameEl);
+  info.appendChild(statusEl);
 
   // Actions container
   const right = document.createElement("div");
   right.className = "actions";
 
-  // Default buttons from opts
-  (opts.buttons || []).forEach((btnDef) => {
-    if (btnDef.text === "Logout" && user !== loggedInUser) return;
-    const b = createStyledButton(btnDef.text, btnDef.onClick);
-    right.appendChild(b);
+  // Buttons from opts
+  (opts.buttons || []).forEach(btnDef => {
+    const btn = createStyledButton(btnDef.text, btnDef.onClick);
+    right.appendChild(btn);
   });
 
-  // 🔥 Friend system buttons
-  if (user !== loggedInUser) {
-    const {
-      friendsAccepted = [],
-      friendsRequestedIn = [],
-      friendsPendingOut = [],
-    } = window.friendsCache || {};
+  // 🔥 Friend system logic
+  if (userId !== loggedInUser) {
+    const { friendsAccepted = [], friendsRequestedIn = [], friendsPendingOut = [] } = window.friendsCache || {};
 
-    if (friendsAccepted.includes(user)) {
-      // Already friends
-      const removeBtn = createStyledButton("Remove Friend", async () => {
-        await updateFriend(loggedInUser, user, "remove");
-        await fetchFriends(loggedInUser);
-        renderFriends();
+    const addOptimisticButton = (label, cacheArray, serverAction) => {
+      const btn = createStyledButton(label, async () => {
+        // 1️⃣ Update local cache
+        cacheArray.push(userId);
+        refreshSidebar();
+
+        // 2️⃣ Send server request
+        try {
+          await serverAction();
+        } catch (err) {
+          console.error(`${label} failed:`, err);
+          // Rollback
+          const index = cacheArray.indexOf(userId);
+          if (index > -1) cacheArray.splice(index, 1);
+          refreshSidebar();
+        }
       });
-      right.appendChild(removeBtn);
+      right.appendChild(btn);
+    };
 
-    } else if (friendsRequestedIn.includes(user)) {
-      // They sent you a request
+    // Already friends
+    if (friendsAccepted.includes(userId)) {
+      addOptimisticButton("Remove Friend", window.friendsCache.friendsAccepted, async () => {
+        await updateFriend(loggedInUser, userId, "remove");
+      });
+
+    // Incoming request
+    } else if (friendsRequestedIn.includes(userId)) {
       const acceptBtn = createStyledButton("Accept", async () => {
-        await updateFriend(loggedInUser, user, "accept");
-        await fetchFriends(loggedInUser);
-        renderFriends();
+        window.friendsCache.friendsRequestedIn = window.friendsCache.friendsRequestedIn.filter(id => id !== userId);
+        window.friendsCache.friendsAccepted.push(userId);
+        refreshSidebar();
+        try {
+          await updateFriend(loggedInUser, userId, "accept");
+        } catch (err) {
+          console.error("Accept failed:", err);
+          // Rollback
+          window.friendsCache.friendsRequestedIn.push(userId);
+          window.friendsCache.friendsAccepted = window.friendsCache.friendsAccepted.filter(id => id !== userId);
+          refreshSidebar();
+        }
+      });
+      const rejectBtn = createStyledButton("Reject", async () => {
+        window.friendsCache.friendsRequestedIn = window.friendsCache.friendsRequestedIn.filter(id => id !== userId);
+        refreshSidebar();
+        try {
+          await updateFriend(loggedInUser, userId, "remove");
+        } catch (err) {
+          console.error("Reject failed:", err);
+          window.friendsCache.friendsRequestedIn.push(userId);
+          refreshSidebar();
+        }
       });
       right.appendChild(acceptBtn);
-
-      const rejectBtn = createStyledButton("Reject", async () => {
-        await updateFriend(loggedInUser, user, "remove");
-        await fetchFriends(loggedInUser);
-        renderFriends();
-      });
       right.appendChild(rejectBtn);
 
-    } else if (friendsPendingOut.includes(user)) {
-      // You already sent a request
+    // Outgoing request
+    } else if (friendsPendingOut.includes(userId)) {
       const pendingBtn = createStyledButton("Pending…", () => {});
       pendingBtn.disabled = true;
-      right.appendChild(pendingBtn);
-
       const cancelBtn = createStyledButton("Cancel", async () => {
-        await updateFriend(loggedInUser, user, "remove");
-        await fetchFriends(loggedInUser);
-        renderFriends();
+        window.friendsCache.friendsPendingOut = window.friendsCache.friendsPendingOut.filter(id => id !== userId);
+        refreshSidebar();
+        try {
+          await updateFriend(loggedInUser, userId, "remove");
+        } catch (err) {
+          console.error("Cancel failed:", err);
+          window.friendsCache.friendsPendingOut.push(userId);
+          refreshSidebar();
+        }
       });
+      right.appendChild(pendingBtn);
       right.appendChild(cancelBtn);
 
+    // Not connected → Add Friend
     } else {
-      // Not connected yet
-      const addBtn = createStyledButton("Add Friend", async () => {
-        await updateFriend(loggedInUser, user, "send");
-        await fetchFriends(loggedInUser);
-        renderFriends();
+      addOptimisticButton("Add Friend", window.friendsCache.friendsPendingOut, async () => {
+        await updateFriend(loggedInUser, userId, "send");
       });
-      right.appendChild(addBtn);
     }
   }
 
@@ -473,12 +513,11 @@ function buildUserRow(user, opts = {}) {
   div.appendChild(info);
   div.appendChild(right);
 
-  if (!opts.preventRowClick) {
-    div.onclick = () => openTab(user);
-  }
+  if (!opts.preventRowClick) div.onclick = () => openTab(userId);
 
   return div;
 }
+
 
 
 // 🛠 Helper: create styled button
@@ -708,108 +747,85 @@ function renderDiscover() {
 }
 
 
-// ================= Sidebar Refresh =================
+// ========================= Sidebar Refresh =========================
 async function refreshSidebar() {
-  const username = localStorage.getItem("loggedInUser");
-  if (!username) return;
+  const userId = localStorage.getItem("loggedInUser");
+  if (!userId) return;
 
-  // Elements
   const friendsListEl = document.getElementById("friends-list");
   const requestsListEl = document.getElementById("friend-requests-list");
   const discoverListEl = document.getElementById("discover-list");
   const groupsListEl = document.getElementById("groups-list");
-
   if (!friendsListEl || !requestsListEl || !discoverListEl || !groupsListEl) return;
 
-  // Clear current lists
+  // Clear lists
   friendsListEl.innerHTML = "";
   requestsListEl.innerHTML = "";
   discoverListEl.innerHTML = "";
   groupsListEl.innerHTML = "";
 
   try {
-    // ---------- Fetch friends ----------
-    const friendsRes = await fetch(`${BASE_URL}/friends?username=${encodeURIComponent(username)}`);
+    // Fetch friends
+    const friendsRes = await fetch(`${BASE_URL}/friends?username=${encodeURIComponent(userId)}`);
     if (!friendsRes.ok) throw new Error(`Friends fetch failed: ${friendsRes.status}`);
     const friendsData = await friendsRes.json();
 
-    console.log("Friends data:", friendsData);
+    const accepted = friendsData.friendsAccepted || [];
+    const requestsIn = friendsData.friendsRequestedIn || [];
+    const pendingOut = friendsData.friendsPendingOut || [];
 
-    // --- Accepted friends ---
-    const accepted = friendsData.friendsAccepted;
+    // Update global friendsCache
+    window.friendsCache = {
+      friendsAccepted: accepted.map(f => f.id),
+      friendsRequestedIn: requestsIn.map(f => f.id),
+      friendsPendingOut: pendingOut.map(f => f.id),
+    };
+
+    // --- Friends Section ---
     if (accepted.length === 0) {
-      const li = document.createElement("li");
-      li.textContent = "No friends yet.";
-      friendsListEl.appendChild(li);
+      const empty = document.createElement("div");
+      empty.textContent = "No friends yet.";
+      empty.style.fontSize = "12px";
+      empty.style.color = "#ccc";
+      friendsListEl.appendChild(empty);
     } else {
-      sortUsersByPresence(accepted).forEach(friend => {
-        const li = document.createElement("li");
-        const online = presence[friend]?.lastActive && Date.now() - presence[friend].lastActive <= 60_000;
-        li.textContent = friend + (online ? " (online)" : "");
-        friendsListEl.appendChild(li);
-      });
+      sortUsersByPresence(accepted).forEach(friend => friendsListEl.appendChild(buildUserRow(friend)));
     }
 
-    // --- Incoming friend requests ---
-    const requests = friendsData.friendsRequestedIn;
-    if (requests.length === 0) {
-      const li = document.createElement("li");
-      li.textContent = "No requests.";
-      requestsListEl.appendChild(li);
+    // --- Incoming Requests ---
+    if (requestsIn.length === 0) {
+      const empty = document.createElement("div");
+      empty.textContent = "No incoming requests.";
+      empty.style.fontSize = "12px";
+      empty.style.color = "#ccc";
+      requestsListEl.appendChild(empty);
     } else {
-      requests.forEach(friend => {
-        const li = document.createElement("li");
-        li.textContent = `${friend} (pending) `;
-
-        const acceptBtn = document.createElement("button");
-        acceptBtn.textContent = "Accept";
-        acceptBtn.onclick = async () => {
-          await sendFriendRequest(friend, "accept");
-          refreshSidebar();
-        };
-
-        const removeBtn = document.createElement("button");
-        removeBtn.textContent = "Remove";
-        removeBtn.onclick = async () => {
-          await sendFriendRequest(friend, "remove");
-          refreshSidebar();
-        };
-
-        li.appendChild(acceptBtn);
-        li.appendChild(removeBtn);
-        requestsListEl.appendChild(li);
-      });
+      sortUsersByPresence(requestsIn).forEach(user => requestsListEl.appendChild(buildUserRow(user, { preventRowClick: true })));
     }
 
-    // ---------- Fetch discoverable users ----------
-    const discoverRes = await fetch(`${BASE_URL}/discover?username=${encodeURIComponent(username)}`);
+    // --- Outgoing Requests ---
+    sortUsersByPresence(pendingOut).forEach(user => requestsListEl.appendChild(buildUserRow(user, { preventRowClick: true })));
+
+    // --- Discover Section ---
+    const discoverRes = await fetch(`${BASE_URL}/discover?userId=${encodeURIComponent(userId)}`);
     if (!discoverRes.ok) throw new Error(`Discover fetch failed: ${discoverRes.status}`);
     const discoverData = await discoverRes.json();
-    console.log("Discover data:", discoverData);
 
-    const knownFriends = new Set(accepted);
-    if (!discoverData.users || discoverData.users.length === 0) {
-      const li = document.createElement("li");
-      li.textContent = "No users to discover.";
-      discoverListEl.appendChild(li);
+    const knownIds = new Set([...accepted.map(f => f.id), ...requestsIn.map(f => f.id), ...pendingOut.map(f => f.id)]);
+    const discoverUsers = [...new Map((discoverData.users || []).map(u => [u.id, u])).values()]
+      .filter(u => u.id !== userId && !knownIds.has(u.id));
+
+    if (discoverUsers.length === 0) {
+      const empty = document.createElement("div");
+      empty.textContent = "No users to discover.";
+      empty.style.fontSize = "12px";
+      empty.style.color = "#ccc";
+      discoverListEl.appendChild(empty);
     } else {
-      sortUsersByPresence(discoverData.users.map(u => u.username))
-        .filter(u => !knownFriends.has(u))
-        .forEach(user => {
-          const li = document.createElement("li");
-          const online = presence[user]?.lastActive && Date.now() - presence[user].lastActive <= 60_000;
-          li.textContent = user + (online ? " (online)" : "");
-
-          const addBtn = document.createElement("button");
-          addBtn.textContent = "Add";
-          addBtn.onclick = () => sendFriendRequest(user, "send");
-
-          li.appendChild(addBtn);
-          discoverListEl.appendChild(li);
-        });
+      sortUsersByPresence(discoverUsers).forEach(user => discoverListEl.appendChild(buildUserRow(user, { preventRowClick: true })));
     }
 
-    // ---------- Render groups ----------
+    // --- Groups Section ---
     if (window.myGroups && myGroups.size > 0) {
       Array.from(myGroups).forEach(group => {
         const li = document.createElement("li");
@@ -827,10 +843,10 @@ async function refreshSidebar() {
   }
 }
 
-// Call once on load and poll every 15 seconds
+
+// Initial load + poll
 refreshSidebar();
 setInterval(refreshSidebar, 15000);
-
 // ---------- Send friend request ----------
 async function sendFriendRequest(toUser) {
   const fromUser = localStorage.getItem("loggedInUser");
@@ -876,9 +892,13 @@ document.getElementById("addFriendBtn").onclick = () => {
 
 const toggleDiscoverBtn = document.getElementById("toggleDiscoverBtn");
 toggleDiscoverBtn.onclick = () => {
-  const isHidden = getComputedStyle(discoverList).display === "none";
-  discoverList.style.display = isHidden ? "block" : "none";
+  const discoverList = document.getElementById("discover-list");
+  if (!discoverList) return; // ✅ Prevents crash
+
+  const isVisible = getComputedStyle(discoverList).display !== "none";
+  discoverList.style.display = isVisible ? "none" : "block";
 };
+
 
 async function goOnline() {
   const username = localStorage.getItem("loggedInUser");
@@ -945,33 +965,41 @@ fetchUserProfile(loggedInUser); // initial fetch
 /* ===== Groups: UI + Data ===== */
 const sidebar = document.getElementById("sidebar");
 
+// Only create + insert Groups section if it doesn’t already exist in HTML
+let groupsHeader = document.getElementById("groupsHeader");
+let groupsList = document.getElementById("groups-list");
+let newGroupBtn = document.getElementById("newGroupBtn");
 
-const groupsHeader = document.createElement("h3");
-groupsHeader.textContent = "Groups";
-const groupsList = document.createElement("div");
-groupsList.id = "groupsList";
+if (!groupsList) {
+  groupsHeader = document.createElement("h3");
+  groupsHeader.id = "groupsHeader";
+  groupsHeader.textContent = "Groups";
 
-// + New Group button
-const newGroupBtn = document.createElement("button");
-newGroupBtn.id = "newGroupBtn";
-newGroupBtn.textContent = "+ New Group";
-newGroupBtn.style.cssText = `
-  width: 100%; padding: 12px; margin-top: 8px; border: none;
-  background: linear-gradient(90deg, #386fa4, #2d4a7c); color: #fff;
-  font-weight: bold; border-radius: 8px; cursor: pointer;
-  transition: transform .2s, box-shadow .2s;
-`;
-newGroupBtn.onmouseenter = () => (newGroupBtn.style.boxShadow = "0 3px 10px rgba(56,111,164,0.4)");
-newGroupBtn.onmouseleave = () => (newGroupBtn.style.boxShadow = "");
+  groupsList = document.createElement("div");
+  groupsList.id = "groups-list";
 
-// Insert into sidebar
-discoverList.insertAdjacentElement("afterend", groupsHeader);
-groupsHeader.insertAdjacentElement("afterend", groupsList);
-groupsList.insertAdjacentElement("afterend", newGroupBtn);
+  newGroupBtn = document.createElement("button");
+  newGroupBtn.id = "newGroupBtn";
+  newGroupBtn.textContent = "+ New Group";
+  newGroupBtn.style.cssText = `
+    width: 100%; padding: 12px; margin-top: 8px; border: none;
+    background: linear-gradient(90deg, #386fa4, #2d4a7c); color: #fff;
+    font-weight: bold; border-radius: 8px; cursor: pointer;
+    transition: transform .2s, box-shadow .2s;
+  `;
+  newGroupBtn.onmouseenter = () => (newGroupBtn.style.boxShadow = "0 3px 10px rgba(56,111,164,0.4)");
+  newGroupBtn.onmouseleave = () => (newGroupBtn.style.boxShadow = "");
+
+  // Insert after discover section
+  const discoverList = document.getElementById("discover-list");
+  discoverList.insertAdjacentElement("afterend", groupsHeader);
+  groupsHeader.insertAdjacentElement("afterend", groupsList);
+  groupsList.insertAdjacentElement("afterend", newGroupBtn);
+}
 
 // Data structures
-let myGroups = new Set();                 // e.g., "group:friends"
-let groupsMeta = {};                      // key -> { id, members, createdBy, createdAt }
+let myGroups = new Set();   // e.g., "group:friends"
+let groupsMeta = {};        // key -> { id, members, createdBy, createdAt }
 
 function parseMembers(raw) {
   if (!raw) return [];
@@ -991,49 +1019,45 @@ groupsList.addEventListener("click", (e) => {
   openTab(`group:${groupName}`);
 });
 
-newGroupBtn.onclick = async () => {
-  let name = prompt("Enter a group name (letters, numbers, -, _ ; max 30 chars):");
-  if (!name) return;
-  name = name.trim().toLowerCase().replace(/[^\w-]+/g, "-").replace(/^-+|-+$/g, "");
-  if (!name) return alert("Invalid name.");
-  if (name.length > 30) name = name.slice(0, 30);
+document.addEventListener("DOMContentLoaded", () => {
+  const newGroupBtn = document.getElementById("newGroupBtn");
+  if (newGroupBtn) {
+    newGroupBtn.onclick = async () => {
+      let name = prompt("Enter a group name (letters, numbers, -, _ ; max 30 chars):");
+      if (!name) return;
+      name = name.trim().toLowerCase().replace(/[^\w-]+/g, "-").replace(/^-+|-+$/g, "");
+      if (!name) return alert("Invalid name.");
+      if (name.length > 30) name = name.slice(0, 30);
 
-  const extra = prompt("Add members (comma-separated usernames), optional:");
-  const members = parseMembers(extra).filter(u => u !== loggedInUser);
+      const extra = prompt("Add members (comma-separated usernames), optional:");
+      const members = parseMembers(extra).filter(u => u !== loggedInUser);
 
-  try {
-    const res = await fetch(`${BASE_URL}/groups`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name,
-        createdBy: loggedInUser,
-        members: [loggedInUser, ...members]
-      })
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || "Failed to create group");
+      try {
+        const res = await fetch(`${BASE_URL}/groups`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name,
+            createdBy: loggedInUser,
+            members: [loggedInUser, ...members],
+          }),
+        });
 
-    // Add group to UI immediately
-    const groupItem = document.createElement("div");
-    groupItem.className = "group-entry";
-    groupItem.dataset.group = name;
-    groupItem.textContent = name;
-    groupItem.style.cssText = `
-      padding: 8px 12px; margin-bottom: 6px;
-      border-radius: 10px; background: #1b3a73;
-      cursor: pointer; transition: all 0.2s;
-    `;
-    groupItem.onmouseenter = () => groupItem.style.background = "#2a4d8c";
-    groupItem.onmouseleave = () => groupItem.style.background = "#1b3a73";
-    groupsList.appendChild(groupItem);
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Failed to create group");
 
-    openTab(`group:${name}`);
-  } catch (e) {
-    console.error(e);
-    alert("Could not create group. Check console for details.");
+        // Refresh list + open group
+        await fetchGroups();
+        openTab(`group:${name}`);
+      } catch (e) {
+        console.error(e);
+        alert("Could not create group. Check console for details.");
+      }
+    };
   }
-};
+});
+
+
 
 
 async function fetchGroups() {
@@ -1487,7 +1511,7 @@ let allMessages = [];  // ← Add this so displayMessages can use it
 
 // ================== Globals ==================
 let messagesByTab = {}; // key = "all", username, or group:groupName → array of messages
-const mutedUsers = new Set();
+
 
 // Render immediately on load
 displayMessages();
