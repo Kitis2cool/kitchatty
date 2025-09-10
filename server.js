@@ -114,7 +114,34 @@ app.get("/presence", async (req, res) => {
   }
 });
 
+
+// -------- Discover: list all users except requester --------
+app.get("/discover", async (req, res) => {
+  const { userId } = req.query;
+  if (!userId) {
+    return res.status(400).json({ error: "Missing userId" });
+  }
+
+  try {
+    const result = await pool.query(
+      "SELECT id, avatar, created_at FROM users WHERE id <> $1 ORDER BY id ASC",
+      [userId]
+    );
+
+    res.json({ users: result.rows });
+  } catch (err) {
+    console.error("Discover query error:", err.message);
+    res.status(500).json({ error: "Failed to fetch discover list", details: err.message });
+  }
+});
+
+
+
+
 // ---------------- Users ----------------
+
+
+
 
 app.use(express.json());
 
@@ -254,7 +281,7 @@ app.post("/friends", async (req, res) => {
          ON CONFLICT (username, friendname) DO UPDATE SET status='requested'`,
         [toUser, fromUser]
       );
-    } 
+    }
     
     else if (action === "accept") {
       await query(
